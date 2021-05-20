@@ -92,12 +92,13 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
             if torch.cuda.is_available() and args.use_gpu:
                 data = data.cuda()
                 label = label.cuda().long()
-
-            output, output_sup1, output_sup2 = model(data)
-            loss1 = loss_func(output, label)
-            loss2 = loss_func(output_sup1, label)
-            loss3 = loss_func(output_sup2, label)
-            loss = loss1 + loss2 + loss3
+            
+            with torch.cuda.amp.autocast():
+                output, output_sup1, output_sup2 = model(data)
+                loss1 = loss_func(output, label)
+                loss2 = loss_func(output_sup1, label)
+                loss3 = loss_func(output_sup2, label)
+                loss = loss1 + loss2 + loss3
             tq.update(args.batch_size)
             tq.set_postfix(loss='%.6f' % loss)
             optimizer.zero_grad()
@@ -111,7 +112,9 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
         writer.add_scalar('epoch/loss_epoch_train', float(loss_train_mean), epoch)
         print('loss for train : %f' % (loss_train_mean))
         if epoch % args.checkpoint_step == 0 and epoch != 0:
+            import os
             if not os.path.isdir(args.save_model_path):
+                import os
                 os.mkdir(args.save_model_path)
             torch.save(model.module.state_dict(),
                        os.path.join(args.save_model_path, 'model.pth'))
@@ -175,7 +178,7 @@ def main(params):
     os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda
     model = BiSeNet(args.num_classes, args.context_path)
     if torch.cuda.is_available() and args.use_gpu:
-        model = model.cuda()
+        model = torch.nn.DataParallel(model).cuda()
 
     # build optimizer
     if args.optimizer == 'rmsprop':
