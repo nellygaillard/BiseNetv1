@@ -13,6 +13,7 @@ from utils import reverse_one_hot, compute_global_accuracy, fast_hist, \
     per_class_iu
 from loss import DiceLoss
 
+
 def get_transform():
     train_transform = Compose([
         RandomResizedCrop(320, (0.5, 2.0)),
@@ -75,10 +76,6 @@ def val(args, model, dataloader):
 
 def train(args, model, optimizer, dataloader_train, dataloader_val):
     writer = SummaryWriter(comment=''.format(args.optimizer, args.context_path))
-
-    buf1 = []
-    buf2 = []
-
     if args.loss == 'dice':
         loss_func = DiceLoss()
     elif args.loss == 'crossentropy':
@@ -95,13 +92,12 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
             if torch.cuda.is_available() and args.use_gpu:
                 data = data.cuda()
                 label = label.cuda().long()
-            
-            with torch.cuda.amp.autocast():
-                output, output_sup1, output_sup2 = model(data)
-                loss1 = loss_func(output, label)
-                loss2 = loss_func(output_sup1, label)
-                loss3 = loss_func(output_sup2, label)
-                loss = loss1 + loss2 + loss3
+             
+            output, output_sup1, output_sup2 = model(data)
+            loss1 = loss_func(output, label)
+            loss2 = loss_func(output_sup1, label)
+            loss3 = loss_func(output_sup2, label)
+            loss = loss1 + loss2 + loss3
             tq.update(args.batch_size)
             tq.set_postfix(loss='%.6f' % loss)
             optimizer.zero_grad()
@@ -110,16 +106,9 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
             step += 1
             writer.add_scalar('loss_step', loss, step)
             loss_record.append(loss.item())
-
-            #buf = str(i) + ',' + str(loss.item()) + '\n'
-            #logFile.write(buf)
-            #logFile.flush()
-
         tq.close()
         loss_train_mean = np.mean(loss_record)
         writer.add_scalar('epoch/loss_epoch_train', float(loss_train_mean), epoch)
-        buf1.append((float(loss_train_mean), epoch))
-
         print('loss for train : %f' % (loss_train_mean))
         if epoch % args.checkpoint_step == 0 and epoch != 0:
             import os
@@ -139,15 +128,6 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
                            os.path.join(args.save_model_path, 'best_dice_loss.pth'))
             writer.add_scalar('epoch/precision_val', precision, epoch)
             writer.add_scalar('epoch/miou val', miou, epoch)
-            buf2.append((precision, miou))
-    
-    with open("./LogLoss.txt", "w") as txt_file:
-      for line in buf1:
-        txt_file.write(",".join(line) + "\n")
-    
-    with open("./LogMetrix.txt", "w") as txt_file:
-      for line in buf2:
-        txt_file.write(",".join(line) + "\n")
 
 
 def main(params):
@@ -224,18 +204,16 @@ def main(params):
 
 if __name__ == '__main__':
     params = [
-        '--num_epochs', '40',
+        '--num_epochs', '30',
         '--learning_rate', '1e-3',
         '--data', 'data',
         '--num_workers', '8',
         '--num_classes', '21',
         '--cuda', '0',
-        '--batch_size', '32',
+        '--batch_size', '16',
         '--save_model_path', './checkpoints_18_sgd',
         '--context_path', 'resnet18',  # set resnet18 or resnet101, only support resnet18 and resnet101
-        '--optimizer', 'adam',
-        
+        '--optimizer', 'sgd',
 
     ]
     main(params)
-
