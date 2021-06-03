@@ -18,6 +18,7 @@ def get_transform():
     train_transform = Compose([
         RandomResizedCrop(320, (0.5, 2.0)),
         RandomHorizontalFlip(),
+        RandomRotation(45),
         ToTensor(),
         Normalize(mean=[0.485, 0.456, 0.406],
                   std=[0.229, 0.224, 0.225]),
@@ -92,14 +93,15 @@ def train(args, model, optimizer, dataloader_train, dataloader_val):
             if torch.cuda.is_available() and args.use_gpu:
                 data = data.cuda()
                 label = label.cuda().long()
-             
-            output, output_sup1, output_sup2 = model(data)
-            loss1 = loss_func(output, label)
-            loss2 = loss_func(output_sup1, label)
-            loss3 = loss_func(output_sup2, label)
-            loss = loss1 + loss2 + loss3
-            tq.update(args.batch_size)
-            tq.set_postfix(loss='%.6f' % loss)
+            
+            with torch.cuda.amp.autocast():
+                output, output_sup1, output_sup2 = model(data)
+                loss1 = loss_func(output, label)
+                loss2 = loss_func(output_sup1, label)
+                loss3 = loss_func(output_sup2, label)
+                loss = loss1 + loss2 + loss3
+                tq.update(args.batch_size)
+                tq.set_postfix(loss='%.6f' % loss)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
